@@ -1,15 +1,15 @@
- ########################### Configure Windows Servers ###########################
+  ########################### Configure Windows Servers ###########################
 
 $NICs = gip
-$ClientDNS = "168.63.129.16","8.8.8.8"
-
+$ClientDNS = "168.63.129.16","10.100.1.10"
+$DC_DNS= "127.0.0.1","168.63.129.16"
 
 # Determine Number of NICs attached
 if ((gip).ipv4address.ipaddress[1] -notlike $null)
 {
     # Get/Set Interfaces as Variables
-    $OutsideNIC = (gip | Where-Object {$_.IPv4DefaultGateway -ne $null})
-    $InsideNIC = (gip | Where-Object {$_.IPv4DefaultGateway -eq $null})
+    $OutsideNIC = (gip | Where-Object {$_.IPv4Address.IPAddress -like "10.100.0*"})
+    $InsideNIC = (gip | Where-Object {$_.IPv4Address.IPAddress -like "10.100.1*"})
 
     # Set the InsideNIC's Gateway to variable
     [int]$LastOctet = 1
@@ -24,9 +24,17 @@ if ((gip).ipv4address.ipaddress[1] -notlike $null)
     ROUTE ADD 0.0.0.0 MASK 128.0.0.0 $OutsideNIC.IPv4DefaultGateway.nexthop IF $OutsideNIC.InterfaceIndex -p
     ROUTE ADD 128.0.0.0 MASK 128.0.0.0 $OutsideNIC.IPv4DefaultGateway.nexthop IF $OutsideNIC.InterfaceIndex -p
 
-    Set-DnsClientServerAddress -InterfaceIndex $OutsideNIC.InterfaceIndex -ServerAddresses $ClientDNS
-    Set-DnsClientServerAddress -InterfaceIndex $InsideNIC.InterfaceIndex -ServerAddresses $ClientDNS
+    if($env:COMPUTERNAME -like "vm-dc1")
+    {
+        Set-DnsClientServerAddress -InterfaceIndex $OutsideNIC.InterfaceIndex -ServerAddresses $DC_DNS
+        Set-DnsClientServerAddress -InterfaceIndex $InsideNIC.InterfaceIndex -ServerAddresses $DC_DNS
 
+    }
+    else
+    {
+        Set-DnsClientServerAddress -InterfaceIndex $OutsideNIC.InterfaceIndex -ServerAddresses $ClientDNS
+        Set-DnsClientServerAddress -InterfaceIndex $InsideNIC.InterfaceIndex -ServerAddresses $ClientDNS
+    }
     # Configure both Interfaces
     netsh interface ip set address name=($OutsideNIC).InterfaceIndex static $OutsideNIC.IPv4Address.Ipaddress 255.255.255.0
     netsh interface ip set address name=($InsideNIC).InterfaceIndex static $InsideNIC.IPv4Address.Ipaddress 255.255.255.0 $InsideGateway
@@ -40,5 +48,3 @@ else
     # Set Client DNS
     Set-DnsClientServerAddress -InterfaceIndex $NIC.InterfaceIndex -ServerAddresses $ClientDNS
 }
-
- 
